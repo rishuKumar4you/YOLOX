@@ -2,6 +2,8 @@
 # -*- coding:utf-8 -*-
 # Copyright (c) Megvii, Inc. and its affiliates.
 
+# tools/demo
+
 import argparse
 import os
 import time
@@ -184,16 +186,46 @@ class Predictor(object):
         return vis_res
 
 
+import json
+##### I have updated this function
 def image_demo(predictor, vis_folder, path, current_time, save_result):
     if os.path.isdir(path):
         files = get_image_list(path)
     else:
         files = [path]
     files.sort()
+    annotations = []
     for image_name in files:
         outputs, img_info = predictor.inference(image_name)
         result_image = predictor.visual(outputs[0], img_info, predictor.confthre)
+
+        # Prepare annotation data
+        img_annotations = {
+            "image_name": os.path.basename(image_name),
+            "image_size": {
+                "width": img_info["width"],
+                "height": img_info["height"]
+            },
+            "annotations": []
+        }
+
+        if outputs[0] is not None:
+            output = outputs[0].cpu().numpy()
+            for box in output:
+                bbox = box[:4].tolist()  # x1, y1, x2, y2
+                score = float(box[4] * box[5])  # object confidence * class confidence
+                cls_id = int(box[6])  # class ID
+                img_annotations["annotations"].append({
+                    "bbox": bbox,
+                    "score": score,
+                    "class_id": cls_id,
+                    "class_name": predictor.cls_names[cls_id]
+                })
+
+        annotations.append(img_annotations)
+
         if save_result:
+            # Save visualized image
             save_folder = os.path.join(
                 vis_folder, time.strftime("%Y_%m_%d_%H_%M_%S", current_time)
             )
@@ -201,9 +233,18 @@ def image_demo(predictor, vis_folder, path, current_time, save_result):
             save_file_name = os.path.join(save_folder, os.path.basename(image_name))
             logger.info("Saving detection result in {}".format(save_file_name))
             cv2.imwrite(save_file_name, result_image)
-        ch = cv2.waitKey(0)
-        if ch == 27 or ch == ord("q") or ch == ord("Q"):
-            break
+
+            # Display the result in Colab
+            from IPython.display import Image, display
+            display(Image(filename=save_file_name))
+
+    # Save all annotations to a JSON file
+    annotations_file = os.path.join(vis_folder, "annotations.json")
+    with open(annotations_file, "w") as f:
+        json.dump(annotations, f, indent=4)
+    logger.info(f"Annotations saved to {annotations_file}")
+
+
 
 
 def imageflow_demo(predictor, vis_folder, current_time, args):
