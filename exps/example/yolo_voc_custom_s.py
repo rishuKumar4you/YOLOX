@@ -17,7 +17,9 @@ class Exp(MyExp):
         self.max_epoch=50
 
         self.weight_decay = 0.0005
-
+        self.save_history_ckpt = False 
+        # If your training process cost many memory, reduce this value.
+        self.data_num_workers = 2
 
         # ---------- transform config ------------ #
         self.mosaic_prob = 0.0
