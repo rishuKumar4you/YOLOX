@@ -189,13 +189,23 @@ class Predictor(object):
 import json
 ##### I have updated this function
 def image_demo(predictor, vis_folder, path, current_time, save_result):
+    import datetime
+    from IPython.display import Image, display
+
+    # Ensure current_time is a datetime object
+    if not isinstance(current_time, datetime.datetime):
+        current_time = datetime.datetime.now()
+
+    # Collect files
     if os.path.isdir(path):
         files = get_image_list(path)
     else:
         files = [path]
     files.sort()
+
     annotations = []
     for image_name in files:
+        logger.info(f"Processing image: {image_name}")
         outputs, img_info = predictor.inference(image_name)
         result_image = predictor.visual(outputs[0], img_info, predictor.confthre)
 
@@ -212,9 +222,17 @@ def image_demo(predictor, vis_folder, path, current_time, save_result):
         if outputs[0] is not None:
             output = outputs[0].cpu().numpy()
             for box in output:
-                bbox = box[:4].tolist()  # x1, y1, x2, y2
-                score = float(box[4] * box[5])  # object confidence * class confidence
-                cls_id = int(box[6])  # class ID
+                # Scale bbox back to original image size
+                x1, y1, x2, y2 = box[:4]
+                x1 = int(x1 / img_info["ratio"])
+                y1 = int(y1 / img_info["ratio"])
+                x2 = int(x2 / img_info["ratio"])
+                y2 = int(y2 / img_info["ratio"])
+
+                bbox = [x1, y1, x2, y2]  # Adjusted bbox
+
+                score = float(box[4] * box[5])  # Object confidence * class confidence
+                cls_id = int(box[6])  # Class ID
                 img_annotations["annotations"].append({
                     "bbox": bbox,
                     "score": score,
@@ -222,27 +240,33 @@ def image_demo(predictor, vis_folder, path, current_time, save_result):
                     "class_name": predictor.cls_names[cls_id]
                 })
 
-        annotations.append(img_annotations)
 
         if save_result:
             # Save visualized image
-            save_folder = os.path.join(
-                vis_folder, time.strftime("%Y_%m_%d_%H_%M_%S", current_time)
-            )
+            timestamp = current_time.strftime("%Y_%m_%d_%H_%M_%S")
+            save_folder = os.path.join(vis_folder, timestamp)
             os.makedirs(save_folder, exist_ok=True)
             save_file_name = os.path.join(save_folder, os.path.basename(image_name))
-            logger.info("Saving detection result in {}".format(save_file_name))
+            
+            logger.info(f"Saving detection result in {save_file_name}")
             cv2.imwrite(save_file_name, result_image)
 
-            # Display the result in Colab
-            from IPython.display import Image, display
-            display(Image(filename=save_file_name))
+            # Display the result in Colab (if applicable)
+            try:
+                display(Image(filename=save_file_name))
+            except Exception as e:
+                logger.warning(f"Unable to display image: {e}")
 
-    # Save all annotations to a JSON file
-    annotations_file = os.path.join(vis_folder, "annotations.json")
-    with open(annotations_file, "w") as f:
-        json.dump(annotations, f, indent=4)
-    logger.info(f"Annotations saved to {annotations_file}")
+            # Save annotations for the specific image
+            annotation_file = os.path.join(save_folder, "annotations.json")
+            with open(annotation_file, "w") as f:
+                json.dump([img_annotations], f, indent=4)
+            logger.info(f"Annotations saved to {annotation_file}")
+
+    # Debugging: Check if files are actually saved
+    logger.info(f"Processed {len(files)} images.")
+
+
 
 
 
