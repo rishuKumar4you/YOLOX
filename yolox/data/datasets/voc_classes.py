@@ -186,4 +186,4 @@ VOC_CLASSES=(
   'Hand Operated Ball Valve',
   'Closed Gate Valve',
   'Electric operator gate valve',
-  'Drum' )
+  'Drum', )
